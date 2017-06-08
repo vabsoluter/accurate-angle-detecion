@@ -120,7 +120,6 @@ int main(int argc, char *argv[])
 	//получение начального угла поворота
 	float startHeading = getHeading();
 	float currentHeading = 0.0;
-	float prevHeading = 0.0; // предыдущее значение угла
 
 	// Начальная инициализация переменных
 	float *ang; // Создание массива для получения угла с гироскопа
@@ -152,42 +151,31 @@ int main(int argc, char *argv[])
 			if(startHeading >= 0.0 && startHeading <= 180.0 && currentHeading >= 0.0 && currentHeading <= 180.0) {
 				// Случай 1
 				angleMagnet = currentHeading - startHeading;
-//				fprintf(stdout, "case 1: %f\t%f\t%f\n", startHeading, currentHeading, angleMagnet);
+
 			} else if(startHeading < 0.0 && startHeading > -180.0 && currentHeading < 0.0 && currentHeading > -180.0) {
 					// Случай 4
 					angleMagnet = currentHeading - startHeading;
-//					fprintf(stdout, "case 4: %f\t%f\t%f\n", startHeading, currentHeading, angleMagnet);
 				} else if(startHeading > 0.0 && startHeading <= 180.0 && currentHeading < 0.0 && currentHeading > -180.0) {
 					// Случай 2
-					// Проверка на смену знаков
-						//if((currentHeading < 0.0 && prevHeading > 0.0) || (currentHeading > 0.0 && prevHeading < 0.0)) {
 							//смена знаков в нуле
 							if(fabs(currentHeading) < 90.0) {
 								angleMagnet = currentHeading - startHeading;
-//								fprintf(stdout, "case 2-0: %f\t%f\t%f\n", startHeading, currentHeading, angleMagnet);
 							} else {
 								// Смена знаков в 180
 								angleMagnet = 180.0 - fabs(currentHeading) + 180.0 - fabs(startHeading);
-//								fprintf(stdout, "case 2-180: %f\t%f\t%f\n", startHeading, currentHeading, angleMagnet);
 							}
-						//}
 					} else if (startHeading < 0.0 && startHeading > -180.0 && currentHeading > 0.0 && currentHeading < 180.0) {
 						// Случай 3
-						// Проверка на смену знаков
-						//if((currentHeading < 0.0 && prevHeading > 0.0) || (currentHeading > 0.0 && prevHeading < 0.0)) {
-							// Смена знаков в нуле
+						// Смена знаков в нуле
 							if(fabs(currentHeading) < 90.0) {
 								angleMagnet = fabs(currentHeading) - fabs(startHeading);
-//								fprintf(stdout, "case 3-0: %f\t%f\t%f\n", startHeading, currentHeading, angleMagnet);
-							} else {
+								} else {
 								// Смена знаков в 180
 								angleMagnet = 180.0 - fabs(currentHeading) + 180.0 - fabs(startHeading);
-//								fprintf(stdout, "case 3-180: %f\t%f\t%f\n", startHeading, currentHeading, angleMagnet);
 							}
-						//}
 					}
 
-			// выполняем фильтрацию
+			// Выполняем фильтрацию
 			kalAngleZ = kalmanZ.getAngle(angleMagnet, rotateAngleGyro, (float)(timer - oldTime)/ CLOCKS_PER_SEC);
 			oldTime = timer; // текущее время запоминаем
 			prevHeading = currentHeading; // текущее измерение запоминаем
