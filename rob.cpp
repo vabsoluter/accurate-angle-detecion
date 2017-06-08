@@ -120,6 +120,7 @@ int main(int argc, char *argv[])
 	//получение начального угла поворота
 	float startHeading = getHeading();
 	float currentHeading = 0.0;
+	float prevHeading = 0.0; // предыдущее значение угла
 
 	// Начальная инициализация переменных
 	float *ang; // Создание массива для получения угла с гироскопа
@@ -143,28 +144,58 @@ int main(int argc, char *argv[])
 
 			// Получение угла поворота магнитометром
 			currentHeading = getHeading();
+			// Получение угла поворота гироскопом
 			angleZGyro += ((float) (ang[2]) * ((float) (timer - oldTime)/ CLOCKS_PER_SEC));
 			rotateAngleGyro = angleZGyro*1.4; //умножаем на коэффициент - установлен экспериментально								 // домножаем на коэaффициент - установлен экспериментально
 
-			// подсчёт угла отклонения (дирекционного) по магнитометру
-			if(startHeading > 0.0 && startHeading < 180.0) {
-				//неважно, где находится второй угол
+			// Подсчёт угла отклонения (дирекционного) по магнитометру
+			if(startHeading >= 0.0 && startHeading <= 180.0 && currentHeading >= 0.0 && currentHeading <= 180.0) {
+				// Случай 1
 				angleMagnet = currentHeading - startHeading;
-			} else { // если startHeading > -180.0 && startHeading < 0.0
-				if(currentHeading > 0.0 && currentHeading < 180.0) {
-					angleMagnet = fabs(currentHeading) + fabs(startHeading);
-				} else { //если currentHeading > -180.0 && currentHeading < 0.0
+//				fprintf(stdout, "case 1: %f\t%f\t%f\n", startHeading, currentHeading, angleMagnet);
+			} else if(startHeading < 0.0 && startHeading > -180.0 && currentHeading < 0.0 && currentHeading > -180.0) {
+					// Случай 4
 					angleMagnet = currentHeading - startHeading;
-				}
-			}
+//					fprintf(stdout, "case 4: %f\t%f\t%f\n", startHeading, currentHeading, angleMagnet);
+				} else if(startHeading > 0.0 && startHeading <= 180.0 && currentHeading < 0.0 && currentHeading > -180.0) {
+					// Случай 2
+					// Проверка на смену знаков
+						//if((currentHeading < 0.0 && prevHeading > 0.0) || (currentHeading > 0.0 && prevHeading < 0.0)) {
+							//смена знаков в нуле
+							if(fabs(currentHeading) < 90.0) {
+								angleMagnet = currentHeading - startHeading;
+//								fprintf(stdout, "case 2-0: %f\t%f\t%f\n", startHeading, currentHeading, angleMagnet);
+							} else {
+								// Смена знаков в 180
+								angleMagnet = 180.0 - fabs(currentHeading) + 180.0 - fabs(startHeading);
+//								fprintf(stdout, "case 2-180: %f\t%f\t%f\n", startHeading, currentHeading, angleMagnet);
+							}
+						//}
+					} else if (startHeading < 0.0 && startHeading > -180.0 && currentHeading > 0.0 && currentHeading < 180.0) {
+						// Случай 3
+						// Проверка на смену знаков
+						//if((currentHeading < 0.0 && prevHeading > 0.0) || (currentHeading > 0.0 && prevHeading < 0.0)) {
+							// Смена знаков в нуле
+							if(fabs(currentHeading) < 90.0) {
+								angleMagnet = fabs(currentHeading) - fabs(startHeading);
+//								fprintf(stdout, "case 3-0: %f\t%f\t%f\n", startHeading, currentHeading, angleMagnet);
+							} else {
+								// Смена знаков в 180
+								angleMagnet = 180.0 - fabs(currentHeading) + 180.0 - fabs(startHeading);
+//								fprintf(stdout, "case 3-180: %f\t%f\t%f\n", startHeading, currentHeading, angleMagnet);
+							}
+						//}
+					}
 
+			// выполняем фильтрацию
 			kalAngleZ = kalmanZ.getAngle(angleMagnet, rotateAngleGyro, (float)(timer - oldTime)/ CLOCKS_PER_SEC);
-			oldTime = timer;
+			oldTime = timer; // текущее время запоминаем
+			prevHeading = currentHeading; // текущее измерение запоминаем
 
-//			fprintf(stdout, "angleMagnet %5.2f\t angleZGyro %5.2f\t kalAngleZ %5.2f\n", angleMagnet, rotateAngleGyro, kalAngleZ);
-			fprintf(stdout, "kalAngleZ %5.2f\n", kalAngleZ);
-//			fprintf(stdout, "angleMagnet %f\n", angleMagnet);
-			usleep(100000);
+			fprintf(stdout, "angleMagnet %5.2f\t angleZGyro %5.2f\t kalAngleZ %5.2f\n", angleMagnet, rotateAngleGyro, kalAngleZ);
+//			fprintf(stdout, "kalAngleZ %5.2f\n", kalAngleZ);
+//			fprintf(stdout, "angleMagnet %f\n", sign(angleMagnet));
+			usleep(10000);
 		}
 
 	return 0;
@@ -179,64 +210,86 @@ int main(int argc, char *argv[])
 float getAccurateAngle(float deg)
 {
 	Kalman kalmanZ;
-	kalmanZ.setAngle(0.0); // Начальный угол.
+		kalmanZ.setAngle(0.0); // Начальный угол.
 
-	/*Установка коэффициентов для фильтра Калмана*/
-	kalmanZ.setQangle(0.007);
-	kalmanZ.setQbias(0.003);
-	kalmanZ.setRmeasure(0.001);
+		/*Установка коэффициентов для фильтра Калмана*/
+		kalmanZ.setQangle(0.007);
+		kalmanZ.setQbias(0.003);
+		kalmanZ.setRmeasure(0.001);
 
-	//получение начального угла поворота
-	float startHeading = getHeading();
-	float currentHeading = 0.0;
+		//получение начального угла поворота
+		float startHeading = getHeading();
+		float currentHeading = 0.0;
+		float prevHeading = 0.0; // предыдущее значение угла
 
-	// Начальная инициализация переменных
-	float *ang; // Создание массива для получения угла с гироскопа
-	float angleZGyro = 0.0;
-	float rotateAngleGyro = 0.0;
-	float angleMagnet = 0.0;
-	upm::Itg3200* gyro = new upm::Itg3200(1);
-	gyro->calibrate();
+		// Начальная инициализация переменных
+		float *ang; // Создание массива для получения угла с гироскопа
+		float angleZGyro = 0.0;
+		float rotateAngleGyro = 0.0;
+		float angleMagnet = 0.0;
+		upm::Itg3200* gyro = new upm::Itg3200(1);
+		gyro->calibrate();
 
-	float timer;
-	// Запись времени начала измерения
-	float oldTime = clock();
-	float kalAngleZ;
+		float timer;
+		// Запись времени начала измерения
+		float oldTime = clock();
+		float kalAngleZ;
 
-		while (1) {
+			while (1) {
 
-			//получение угла поворота гироскопом и запоминаем момент времени измерения
-			gyro->update();
-			ang = gyro->getRotation();
-			timer = clock();
+				//получение угла поворота гироскопом и запоминаем момент времени измерения
+				gyro->update();
+				ang = gyro->getRotation();
+				timer = clock();
 
-			// Получение угла поворота магнитометром
-			currentHeading = getHeading();
-			angleZGyro += ((float) (ang[2]) * ((float) (timer - oldTime)/ CLOCKS_PER_SEC));
-			rotateAngleGyro = angleZGyro*1.4; //умножаем на коэффициент - установлен экспериментально								 // домножаем на коэaффициент - установлен экспериментально
+				// Получение угла поворота магнитометром
+				currentHeading = getHeading();
+				// Получение угла поворота гироскопом
+				angleZGyro += ((float) (ang[2]) * ((float) (timer - oldTime)/ CLOCKS_PER_SEC));
+				rotateAngleGyro = angleZGyro*1.4; //умножаем на коэффициент - установлен экспериментально								 // домножаем на коэaффициент - установлен экспериментально
 
-			// подсчёт угла отклонения (дирекционного) по магнитометру
-			if(startHeading > 0.0 && startHeading < 180.0) {
-				//неважно, где находится второй угол
-				angleMagnet = currentHeading - startHeading;
-			} else { // если startHeading > -180.0 && startHeading < 0.0
-				if(currentHeading > 0.0 && currentHeading < 180.0) {
-					angleMagnet = fabs(currentHeading) + fabs(startHeading);
-				} else { //если currentHeading > -180.0 && currentHeading < 0.0
+				// Подсчёт угла отклонения (дирекционного) по магнитометру
+				if(startHeading > 0.0 && startHeading <= 180.0 && currentHeading > 0.0 && currentHeading < 180.0) {
+					// Случай 1
 					angleMagnet = currentHeading - startHeading;
-				}
+				} else if(startHeading < 0.0 && startHeading > -180.0 && currentHeading < 0.0 && currentHeading > -180.0) {
+						// Случай 4
+						angleMagnet = currentHeading - startHeading;
+					} else if(startHeading < 0.0 && startHeading > -180.0 && currentHeading > 0.0 && currentHeading < 180.0) {
+						// Случай 2
+						// Проверка на смену знаков
+							if((currentHeading < 0.0 && prevHeading > 0.0) || (currentHeading > 0.0 && prevHeading < 0.0)) {
+								//смена знаков в нуле
+								if(fabs(currentHeading) < 90.0) {
+									angleMagnet = currentHeading - startHeading;
+								} else {
+									// Смена знаков в 180
+									angleMagnet = 180.0 - fabs(currentHeading) + 180.0 - fabs(startHeading);
+								}
+							}
+						} else if (startHeading < 0.0 && startHeading > -180.0 && currentHeading > 0.0 && currentHeading < 180.0) {
+							// Случай 3
+							// Проверка на смену знаков
+							if((currentHeading < 0.0 && prevHeading > 0.0) || (currentHeading > 0.0 && prevHeading < 0.0)) {
+								// Смена знаков в нуле
+								if(fabs(currentHeading) < 90.0) {
+									angleMagnet = fabs(currentHeading) - fabs(startHeading);
+								} else {
+									// Смена знаков в 180
+									angleMagnet = 180.0 - fabs(currentHeading) + 180.0 - fabs(startHeading);
+								}
+							}
+						}
+
+				// выполняем фильтрацию
+				kalAngleZ = kalmanZ.getAngle(angleMagnet, rotateAngleGyro, (float)(timer - oldTime)/ CLOCKS_PER_SEC);
+				oldTime = timer; // текущее вресмя запоминаем
+				prevHeading = currentHeading; // текущее измерение запоминаем
+
+				usleep(100000);
+
+				if(abs(kalAngleZ)>= abs((float)deg)-5.0)
+					return kalAngleZ;
 			}
-
-			kalAngleZ = kalmanZ.getAngle(angleMagnet, rotateAngleGyro, (float)(timer - oldTime)/ CLOCKS_PER_SEC);
-			oldTime = timer;
-
-	//			fprintf(stdout, "angleMagnet %5.2f\t angleZGyro %5.2f\t kalAngleZ %5.2f\n", angleMagnet, rotateAngleGyro, kalAngleZ);
-			fprintf(stdout, "kalAngleZ %5.2f\n", kalAngleZ);
-	//			fprintf(stdout, "angleMagnet %f\n", angleMagnet);
-			usleep(100000);
-
-		if(abs(kalAngleZ)>= abs((float)deg)-5.0)
-			return kalAngleZ;
-		}
 }
 
